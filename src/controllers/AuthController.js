@@ -1,5 +1,5 @@
 const USERS = [{
-    nama: "Joko",
+    name: "Joko",
     email: "joko@gmail.com",
     password: "12345678",
 },
