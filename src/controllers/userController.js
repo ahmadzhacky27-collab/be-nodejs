@@ -1,29 +1,6 @@
 import pool from "../config/db.js";
 
-const USERS = [
-    {
-        id: 1,
-        name: "Joko",
-        email: "joko@gmail.com",
-        password: "12345678",
-    },
-    {
-        id: 2,
-        name: "Anis",
-        email: "anis@gmail.com",
-        password: "12345678",
-    },
-    {
-        id: 3,
-        name: "Ganjar",
-        email: "ganjar@gmail.com",
-        password: "12345678",
-    },
-];
-
-// CRUD
-
-// READ
+// GET ALL DATA
 export const getAllUser = async (req, res) => {
 
     try {
@@ -37,29 +14,29 @@ export const getAllUser = async (req, res) => {
     } catch (error) {
         return res.status(500).json({
             status: false,
-            message: "Fetch user success",
+            message: "Fetch user failed",
             error: error.message
         });
     }
 }
 
+// GET 1 DATA
 export const getUserById = async (req, res) => {
 
     try {
         const id = parseInt(req.params.id);
-        // FIND
-        const user = await pool.query("SELECT id, name, email, is_active FROM users WHERE id= ?", [id],);
-        if (!user) {
+        const [rows] = await pool.query("SELECT id, name, email, is_active FROM users WHERE id= ?", [id]);
+        if (rows.length === 0) {
             res.status(404).json({
                 status: false,
                 message: "User not found",
-            })
+            });
         }
 
-        res.status(200).json({
+        return res.status(200).json({
             status: true,
             message: "User found",
-            data: user,
+            data: rows[0],
         });
 
     } catch (error) {
@@ -92,38 +69,43 @@ export const createUser = async (req, res) => {
 };
 
 export const updateUser = async (req, res) => {
-    const id = parseInt(req.params.id);
-    const { name, email, password } = req.body;
+    try {
+        const id = parseInt(req.params.id);
 
-    const userIndex = USERS.findIndex((u) => u.id === id);
-    USERS[userIndex] = {
-        ...USERS[userIndex],
-        ...(name && { name }),
-        ...(email && { email }),
-        ...(password && { password })
-    }
-
-    return res.status(200).json({
-        status: true,
-        message: 'Update user success',
-        data: USERS[userIndex]
-    });
-}
-
-export const deleteUser = (req, res) => {
-    const id = parseInt(req.params.id);
-    const userIndex = USERS.findIndex((u) => u.id === id);
-
-    if (userIndex === -1) {
-        res.status(404).json({
+        await pool.query("UPDATE FROM users WHERE id=?", [id]);
+        return res.status(200).json({
+            status: true,
+            message: "UPDATE IS SUCCESS",
+        });
+    } catch (error) {
+        return res.status(500).json({
             status: false,
-            message: "User not found",
-        })
+            message: error.message,
+        });
     }
+};
 
-    const deletedUser = USERS.splice(userIndex, 1)[0];
-    return res.status(200).json({
-        status: true,
-        message: "Delete user success",
-    });
+export const deleteUser = async (req, res) => {
+    const id = parseInt(req.params.id);
+    try {
+        const [result] = await pool.query("DELETE FROM users WHERE id=?", [id]);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({
+                status: false,
+                message: "User not found",
+            });
+        }
+
+        return res.status(200).json({
+            status: true,
+            message: "Delete User Success",
+        });
+    } catch (error) {
+        return res.status(500).json({
+            status: false,
+            message: "Delete user failed",
+            error: error.message
+        });
+    }
 };
