@@ -48,12 +48,11 @@ export const getUserById = async (req, res) => {
     }
 };
 
+// CREATE USER
 export const createUser = async (req, res) => {
     const { name, email, password } = req.body;
     try {
-
         const [user] = await pool.query("INSERT INTO users(name,email,password) VALUES (?,?,?)", [name, email, password]);
-
         return res.status(201).json({
             status: true,
             message: "Create Data Success",
@@ -68,11 +67,17 @@ export const createUser = async (req, res) => {
     }
 };
 
+// UPDATE USER
 export const updateUser = async (req, res) => {
     try {
         const id = parseInt(req.params.id);
+        const { name, email, password, is_active } = req.body;
 
-        await pool.query("UPDATE FROM users WHERE id=?", [id]);
+        if (!password) {
+            const [user] = await pool.query("UPDATE users SET name=?, email=?, is_active=? WHERE id=?", [name, email, is_active, id]);
+        } else {
+            const [user] = await pool.query("UPDATE users SET name=?, email=?, password=?, is_active=? WHERE id=?", [name, email, password, is_active, id]);
+        }
         return res.status(200).json({
             status: true,
             message: "UPDATE IS SUCCESS",
@@ -85,18 +90,17 @@ export const updateUser = async (req, res) => {
     }
 };
 
+// DELETE USER
 export const deleteUser = async (req, res) => {
     const id = parseInt(req.params.id);
     try {
         const [result] = await pool.query("DELETE FROM users WHERE id=?", [id]);
-
         if (result.affectedRows === 0) {
             return res.status(404).json({
                 status: false,
                 message: "User not found",
             });
         }
-
         return res.status(200).json({
             status: true,
             message: "Delete User Success",
