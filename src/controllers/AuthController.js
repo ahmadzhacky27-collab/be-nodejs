@@ -1,3 +1,7 @@
+import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
+
+import pool from "../config/db.js";
 const USERS = [{
     name: "Joko",
     email: "joko@gmail.com",
@@ -5,7 +9,7 @@ const USERS = [{
 },
 ];
 
-export const login = (req, res) => {
+export const login = async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -18,26 +22,47 @@ export const login = (req, res) => {
         });
     }
 
-    const user = USERS.find((u) => u.email === email && u.password === password);
+    // const user = USERS.find((u) => u.email === email && u.password === password);
 
-    if (!user) {
+    const [user] = await pool.query("SELECT id, name, email, password FROM users WHERE email =?", [email]);
+
+    if (user.length === 0) {
+        return res.status(401).json({
+            status: false,
+            message: "Invalid credential"
+        });
+    }
+
+    const dataUser = user[0];
+    const isMatch = await bcrypt.compare(password, dataUser.password);
+
+    if (!isMatch) {
         // 401 unauthorize login gagal
         return res.status(401).json({
             status: false,
-            message: "Please check your email or password."
+            message: "Invalid credential"
         });
     }
+
+    const token = jwt.sign({
+        id: dataUser.id,
+        name: dataUser.name,
+        email: dataUser.email,
+    },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRES_IN || '1d' },
+    );
 
     res.status(200).json({
         status: true,
         message: "Login success",
         data: {
             user: {
-                id: user.id,
-                name: user.name,
-                email: user.email,
+                id: dataUser.id,
+                name: dataUser.name,
+                email: dataUser.email,
             },
-            token: `jwt-token-123 ${user.id} - ${Date.now()}`
+            token,
         }
     });
 };
