@@ -2,10 +2,35 @@ import pool from "../config/db.js";
 import { snap } from "../config/midtrans.js"
 
 export const createTransaction = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
-        const connection = await pool.getConnection();
-        const { order_number, user_id, payment_method, subtotal, tax, total, items } = req.body;
-        const [transaction] = await pool.query("INSERT INTO orders (order_number, user_id, payment_method, subtotal, tax, total) VALUES (?,?,?,?,?,?)", [order_number, user_id, payment_method, subtotal, tax, total]);
+        const { order_number, user_id, payment_method, subtotal, tax, total, items = [], pay = 0 } = req.body;
+
+        // const userId = req.user?.id;
+
+        await connection.beginTransaction();
+        // const orderNumber = await generateOrderNumber(connection);        
+        // console.log("order number", orderNumber);
+        const isMidtrans = String(payment_method) === "1" || payment_method === "midtrans";
+        let change = 0;
+        let cashReceive = 0;
+        let status = "pending";
+
+        if (payment_method === 2) {
+            cashReceive = Number(pay);
+            if (cashReceive < Number(total)) {
+                await connection.rollback();
+                return res.status(400).json({
+                    status: false,
+                    message: "Cash less than the total",
+                });
+            }
+            change = cashReceive - Number(total);
+            status = "settlement";
+        }
+
+        const [transaction] = await pool.query("INSERT INTO orders (order_number, user_id, payment_method, subtotal, tax, total, pay, status) VALUES (?,?,?,?,?,?,?,?)", [order_number, user_id, payment_method, subtotal, tax, total, pay, status]);
+
         const orderId = transaction.insertId;
 
         if (items) {
@@ -14,11 +39,12 @@ export const createTransaction = async (req, res) => {
             }
         }
         let midtransResponse = null;
+
         if (payment_method === 1) {
             const parameter = {
                 transaction_details: {
                     order_id: order_number,
-                    gross_amount: total,
+                    gross_amount: subtotal,
                 },
                 enable_payments: ['gopay'],
                 item_details: items.map(item => ({
@@ -37,16 +63,27 @@ export const createTransaction = async (req, res) => {
             message: Number(payment_method) === 1 ? "Order Berhasil silahkan bayar dengan gopay" : "payment cash berhasil",
             order_id: orderId,
             order_number: order_number,
+            payment_details: payment_method == 2
+                ?
+                {
+                    total: Number(total),
+                    cashReceive: cashReceive,
+                    change: change,
+                }
+                : null,
             payment_gateway: midtransResponse ? {
                 token: midtransResponse.token,
                 redirect_url: midtransResponse.redirect_url
             } : null,
         });
     } catch (error) {
+        await connection.rollback();
         return res.status(500).json({
             status: false,
             message: error.message
         })
+    } finally {
+        connection.release();
     }
 };
 
@@ -91,4 +128,24 @@ export const getAllTransaction = async (req, res) => {
             message: error.message,
         });
     }
+};
+
+const generateOrderNumber = async (connection) => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const date = now.getDate();
+    const prefix = `TR-${year}${month}${date}-`;
+
+    const [lastOrder] = await connection.query("SELECT order_number FROM orders WHERE order_number LIKE ? ORDER BY id DESC LIMIT 1 FOR UPDATE", [`${prefix}`]);
+
+    const nextNumber = 1;
+    if (lastOrder.length > 0) {
+        const lastNumber = lastOrder[0].order_number;
+        const currentNumber = parseInt(lastNumber.split("-")[2], 10);
+        if (!isNaN(currentNumber)) {
+            nextNumber = currentNumber + 1;
+        }
+    }
+    return `${prefix}${String(nextNumber).padStart(4, "0")}`;
 };
